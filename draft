@@ -1,0 +1,125 @@
+################################################################################################################################################################################################################################
+# When I created this script I wasn't able to lower the in-game resolution. My Odin 2 has a 1920x1080 screen size and I didn't have the option to lower the graphic settings to 1280x720 so I can have a better game performance
+# I use this script to trigger open wine settings and change the resolution of apps launched by bvox64 wine64.
+# The change of resolution only applies to games launched with a game launch script that contain WINEPREFIX="/storage/.wine64-shared"  in their game launch command. 
+# Other stuff launched by wine with a different wineprefix won't be affected.
+# 
+# IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT
+# 
+# BEFORE LAUNCHING THIS SCRIPT, YOU NEED TO GENERATE A WINE PREFIX & GAME LAUNCH SCRIPT WITH  "curl -L bit.ly/rocknixwine | bash"
+# THE COMMAND IS TAKEN FROM https://github.com/trashbus99/Rocknix-WINE
+# I PREFER MY WINE PREFIX TO BE A SHARED ONE, NOT A DEDICATED ONE
+################################################################################################################################################################################################################################
+
+#!/bin/bash
+WINEPREFIX="/storage/.wine64-shared" box64 wine64 winecfg
+
+  
+#######################################################################################################################################
+# ONCE YOU HAVE A WORKING GAME LAUNCH SCRIPT (read above, command on line 9) you'll have a game launch script and wine prefix created
+# ONCE THE BELOW GAME SCRIPT WAS CREATED
+# sway commands added by me to ensuure the image gets scaled when the game is  launched and scaled back when exited
+#######################################################################################################################################
+#!/bin/bash
+# Determine PortMaster control folder
+if [ -d "/opt/system/Tools/PortMaster/" ]; then
+  controlfolder="/opt/system/Tools/PortMaster"
+elif [ -d "/opt/tools/PortMaster/" ]; then
+  controlfolder="/opt/tools/PortMaster"
+else
+  controlfolder="/roms/ports/PortMaster"
+fi
+
+# Source control files if available
+source "${controlfolder}/control.txt"
+[ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
+get_controls
+
+# Variables
+GAMEDIR="/storage/roms/ports/cocoon"
+WINEPREFIX="/storage/.wine64-shared"
+
+# Ensure the game directory exists.
+if [ ! -d "$GAMEDIR" ]; then
+  echo "Error: Game directory missing ($GAMEDIR). Please check your installation."
+  exit 1
+fi
+
+# Change to game directory and prepare logging.
+cd "$GAMEDIR"
+> "$GAMEDIR/log.txt" && exec > >(tee "$GAMEDIR/log.txt") 2>&1
+chmod +x -R "$GAMEDIR"/*
+
+# Environment variable exports.
+export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
+export WINEPREFIX="/storage/.wine64-shared"
+export WINEDEBUG=-all
+
+# Graphics and optimization options.
+export DXVK_HUD=fps,version
+export DXVK_ASYNC=1
+export STAGING_SHARED_MEMORY=1
+export STAGING_WRITECOPY=1
+
+# Sound setup
+export PULSE_LATENCY_MSEC=90
+
+# Check if pm_message exists.
+if ! type pm_message &>/dev/null; then
+    echo "Warning: pm_message function is missing. Skipping dependency message."
+else
+    pm_message "Checking for and installing dependencies..."
+fi
+
+# Config Setup: create config directory and bind to the Wine save folder.
+mkdir -p "$GAMEDIR/config"
+if [ "$(type -t bind_directories)" = "function" ]; then
+    bind_directories "$WINEPREFIX/drive_c/users/root/AppData/LocalLow/Andrew Shouldice/Secret Legend" "$GAMEDIR/config"
+else
+    echo "Warning: bind_directories function is missing. Skipping config binding."
+fi
+
+# Check that box64, wine64, and GPTOKEYB exist before launching.
+if ! command -v box64 &>/dev/null || ! command -v wine64 &>/dev/null; then
+  echo "Error: box64 or wine64 is missing. Install them before running the game."
+  exit 1
+fi
+if ! command -v /usr/bin/gptokeyb &>/dev/null; then
+  echo "Error: GPTOKEYB is missing. Install it before running the game."
+  exit 1
+fi
+
+export BOX64_DYNAREC_SAFEFLAGS=1
+export BOX64_DYNAREC_FASTNAN=1
+export BOX64_DYNAREC_FASTROUND=1
+export BOX64_DYNAREC_X87DOUBLE=0
+export BOX64_DYNAREC_BIGBLOCK=3
+export BOX64_DYNAREC_STRONGMEM=0
+export BOX64_DYNAREC_FORWARD=512
+export BOX64_DYNAREC_CALLRET=1
+export BOX64_DYNAREC_WAIT=1
+export BOX64_AVX=0
+export BOX64_MAXCPU=8
+export BOX64_UNITYPLAYER=1
+
+# Set Sway scaling to 1.5 to upscale 1280x720 to 1920x1080 for output DSI-1
+swaymsg output DSI-1 scale 1.5
+# Set the scaling_filter to linear. 
+# The available options can vary by version. Common choices are:
+# nearest: Preserves hard edges (good for pixel art) but can look blocky.
+# smart
+# linear: Provides smoother interpolation.
+# spline (if available): Might offer a good balance between sharpness and smoothness.
+swaymsg output DSI-1 scale_filter linear
+# Trap to reset scaling when script exits
+trap 'swaymsg output DSI-1 scale 1' EXIT
+
+# Launch the game:
+# First, launch GPToKeyB for controller mapping.
+/usr/bin/gptokeyb "universe.exe" -c "./cocoon.gptk" &
+# Then launch the game executable from the data folder using box64/wine64.
+WINEPREFIX="/storage/.wine64-shared" box64 wine64 "$GAMEDIR/data/"universe.exe""
+
+
+
+
